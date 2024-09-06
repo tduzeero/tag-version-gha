@@ -1,0 +1,96 @@
+name: 'Version Tag'
+description: 'Manage Version with tags'
+inputs:
+  user-from:
+    type: choice
+    description: 'The user owner'
+    required: true
+    default: 'github-bot'
+    options:
+      - 'github-bot'
+      - 'commit-head'
+  tag-message:
+    description: 'Tag message'
+    default: 'New version %s\n\n Log changes: \n\n%s'
+  update-message:
+    description: 'Update message'
+    default: 'chore(build): bump version to %s'
+  version:
+    description: 'Custom version. Used if version-from is "git" and didn't found any tag or when is "version" as value'
+    required: true
+    default: 'v0.0.1'
+  version-from:
+    type: choice
+    description: 'The type of the version'
+    required: true
+    default: 'git'
+    options:
+      - version
+      - git
+outputs:
+  current-version:
+    description: "Current version"
+    value: ${{ steps.extract-current-version.outputs.current-version }}
+  computed-version:
+    description: "Computed version number"
+    value: ${{ steps.extract-computed-version.outputs.computed-version }}
+  commits:
+    description: "Short Commits"
+    value: ${{ steps.extract-commits.outputs.commits}}
+runs:
+  using: "composite"
+  steps:
+    - name: Set GitHub Path
+      run: echo "$GITHUB_ACTION_PATH" >> $GITHUB_PATH
+      shell: bash
+      env:
+        GITHUB_ACTION_PATH: ${{ github.action_path }}
+
+    - name: Set git user and email
+      run: set-git-user.sh $USER_FROM
+      shell: bash
+      env:
+        USER_FROM: ${{ inputs.user-from }}
+
+    - name: Extract current version
+      id: extract-current-version 
+      run: echo "current-version=$(echo extract-current-version.sh $VERSION_FROM $VERSION)" >> $GITHUB_OUTPUT
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        VERSION_FROM: ${{ inputs.version-from }}
+
+    - name: Extract commits
+      id: extract-commits 
+      run: echo "commits=$(echo extract-commits.sh $VERSION_FROM $VERSION)" >> $GITHUB_OUTPUT
+      shell: bash
+      env:
+        VERSION: ${{ outputs.current-version }}
+        VERSION_FROM: ${{ inputs.version-from }}
+
+    - name: Extract computed version
+      id: extract-computed-version 
+      run: echo "computed-version=$(echo extract-computed-version.sh $VERSION_FROM $VERSION $COMMITS)" >> $GITHUB_OUTPUT
+      shell: bash
+      env:
+        VERSION: ${{ outputs.current-version }}
+        VERSION_FROM: ${{ inputs.version-from }}
+        COMMITS: ${{ outpus.commits }}
+
+    - name: Update version
+      id: update version
+      run: update-version.sh $VERSION $UPDATE_MESSAGE
+      shell: bash
+      env:
+        VERSION: ${{ outputs.computed-version }}
+        UPDATE_MESSAGE: ${{ inputs.update-message }}
+
+    - name: Create the tag
+      if: ${{ inputs.tag-create }}
+      run: create-tag.sh $VERSION $TAG_MESSAGE $COMMITS
+      shell: bash
+      env:
+        TAG_MESSAGE: ${{ inputs.tag-message }}
+        COMMITS: ${{ outpus.commits }}
+        VERSION: ${{ outputs.computed-version }}
+
